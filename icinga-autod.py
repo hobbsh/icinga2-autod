@@ -157,19 +157,17 @@ def handle_netscan(cidr):
     return nm
 
 
-def snmpget_by_cl(host, credential, oid, timeout=2, retries=0):
+def snmpget_by_cl(host, credential, oid, timeout=1, retries=0):
     '''
     Slightly modified snmpget method from net-snmp source to loop through multiple communities if necessary
     '''
 
     data = {}
-    data['output'] = ''
-    data['community'] = ''
     version = credential['version']
     community = credential['community']
+    com_count = len(community)
 
-    cred_len = len(community)
-    for i in range(0, cred_len):
+    for i in range(0, com_count):
 	cmd = ''
 	community = credential['community'][i]
         cmd = "snmpget -Oqv -v %s -c %s -r %s -t %s %s %s" % (
@@ -178,15 +176,17 @@ def snmpget_by_cl(host, credential, oid, timeout=2, retries=0):
 	returncode, output, err = exec_command(cmd)
 
         if returncode and err:
-	    if i < cred_len:
+	    if i < com_count:
 	        continue	
 	else:
 	    try:
 	        data['output'] = output
 	        data['community'] = community
+		#Got the data, now get out
 		break	
 	    except Exception, e:
-		print str(e)
+		print "There was a problem appending data to the dict " + str(e)
+
     return data
 
 def exec_command(command):
