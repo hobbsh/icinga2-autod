@@ -3,6 +3,9 @@
 ##Purpose:
 The purpose of icinga-autod is to bring basic auto-discovery (to Icinga2 or Nagios Core) in an effort to take some of the pain away from discovering and adding a bunch of devices on new or existing networks. The focus of this tool is to quickly generate a fairly suitable host config with custom vars to tie them to HostGroups. 
 
+##Requirements
+This script requires Linux packages 'nmap' and 'python-nmap'
+
 ##Usage:
 ./icinga-autod.py -n 192.168.1.0/24 -l LOCATION
 
@@ -18,3 +21,4 @@ The purpose of icinga-autod is to bring basic auto-discovery (to Icinga2 or Nagi
 - Integrate with icingaweb2
 - Add SNMPv3 Support
 - Handle bad user input better
+
