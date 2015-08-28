@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 import sys
-import os
 import subprocess
 import argparse
 import nmap
 import time
-import json
 
 """
 This discovery script will scan a subnet for alive hosts, 
@@ -50,7 +48,7 @@ def main():
 
     all_hosts = {}
 
-    print("Found {0} hosts - gathering more info (can take up to 2 minutes)".format(get_count(nm.all_hosts()))
+    print("Found {0} hosts - gathering more info (can take up to 2 minutes)".format(get_count(nm.all_hosts())))
 
     for host in nm.all_hosts():
 	host = str(host)
