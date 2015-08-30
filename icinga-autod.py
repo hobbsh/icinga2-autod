@@ -4,6 +4,7 @@ import subprocess
 import argparse
 import nmap
 import time
+import socket
 
 """
 This discovery script will scan a subnet for alive hosts, 
@@ -12,8 +13,24 @@ then create a hosts.conf in the current directory for use in Nagios or Icinga
 
 required Linux packages: python-nmap and nmap
 
-Wylie Hobbs - 08/28/2015
+Copyright Wylie Hobbs - 08/28/2015
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 """
+
+USAGE = './icinga-autod.py -n 192.168.1.0/24 -L LOCATION'
 
 def build_parser():
 
@@ -22,8 +39,14 @@ def build_parser():
     parser.add_argument('-n', '--network',
 	help='Network segment (only /24) to iterate through for live IP addresses in CIDR IPv4 Notation')
 
-    parser.add_argument('-l', '--location',
+    parser.add_argument('-L', '--location',
         help='Location alias of the network - will be appended to the hosts config (i.e. hosts_location.conf)')
+
+    parser.add_argument('-c', '--communities', default="public,private",
+        help='Specify comma-separated list of SNMP communities to iterate through (to override default public,private)')
+
+    parser.add_argument('-t', '--thorough', default=0,
+        help='Thorough scan mode (will take longer) - will try additional SNMP versions/communities to try to gather as much information as possible')
 
     return parser
 
@@ -31,6 +54,12 @@ def main():
 
     parser = build_parser()
     args = parser.parse_args()
+
+    '''Check arguments'''    
+    if check_args(args) is False:
+	sys.stderr.write("There was a problem validating the arguments supplied. Please check your input and try again. Exiting...\n")
+	sys.exit(1)
+
     start_time = time.time()
 
     cidr = args.network
@@ -38,7 +67,7 @@ def main():
 
     credential = dict()
     credential['version'] = '2c'
-    credential['community'] = ['public', 'private']
+    credential['community'] = args.communities.split(',')
 
     #Hostname and sysDescr OIDs
     oids = '.1.3.6.1.2.1.1.5.0 1.3.6.1.2.1.1.1.0'
@@ -50,6 +79,7 @@ def main():
 
     print("Found {0} hosts - gathering more info (can take up to 2 minutes)".format(get_count(nm.all_hosts())))
 
+    print credential['community']
     for host in nm.all_hosts():
 	host = str(host)
 
@@ -60,17 +90,24 @@ def main():
 	'''
 
 	data = snmpget_by_cl(host, credential, oids)
-	output = data['output'].split('\n')
 
+	'''TODO: clean up this logic...'''
 	try:
+	    output = data['output'].split('\n')
+	    community = data['community']
+	except:
+	    community = 'unknown'
+	    output = ''
+
+	if output:
 	    hostname = output[0]
 	    sysdesc = output[1]
-	except:
+	else:
 	    hostname = ''
 	    sysdesc = ''
 	
 	all_hosts[host] = { 
-	    'community': data['community'], 'snmp_version': credential['version'], 'hostname': hostname, 'sysdesc': sysdesc }
+	    'community': community, 'snmp_version': credential['version'], 'hostname': hostname, 'sysdesc': sysdesc }
 
     print "\n"
     print("Discovery took %s seconds" % (time.time() - start_time))
@@ -78,6 +115,52 @@ def main():
 
     outfile = compile_hosts(all_hosts, location)
     print "Wrote data to "+outfile
+
+def check_args(args):
+    '''Exit if required arguments not specified'''
+    if args.network == None or args.location == None:
+	sys.stderr.write("Network and/or location are required arguments! Use -h for help\n")
+	sys.exit(1)
+
+    check_flags = {}
+    '''Iterate through specified args and make sure input is valid. TODO: add more flags'''
+    for k,v in vars(args).iteritems():
+        if k == 'network':
+	    network = v.split('/')[0]
+	    if len(network) > 7:
+	    	if is_valid_ipv4_address(network) is False:
+		    check_flags['is_valid_ipv4_address'] = False
+	    else:	
+		check_flags['is_valid_ipv4_format'] = False
+		
+    last_idx = len(check_flags) - 1
+    last_key = ''
+
+    '''Find last index key so all the violated flags can be output in the next loop'''
+    for idx, key in enumerate(check_flags):
+	if idx == last_idx:
+	    last_key = key
+	
+    for flag, val in check_flags.iteritems():
+        if val is False:
+	    sys.stderr.write("Check "+flag+" failed to validate your input.\n")
+	    if flag == last_key:
+		return False 
+
+def is_valid_ipv4_address(address):
+    '''from http://stackoverflow.com/questions/319279/how-to-validate-ip-address-in-python'''
+    try:
+        socket.inet_pton(socket.AF_INET, address)
+    except AttributeError:  # no inet_pton here, sorry
+        try:
+            socket.inet_aton(address)
+        except socket.error:
+            return False
+        return address.count('.') == 3
+    except socket.error:  # not a valid address
+        return False
+
+    return True
 
 def get_count(hosts):
     count = len(hosts)
@@ -157,36 +240,39 @@ def handle_netscan(cidr):
     return nm
 
 
-def snmpget_by_cl(host, credential, oid, timeout=2, retries=0):
+def snmpget_by_cl(host, credential, oid, timeout=1, retries=0):
     '''
     Slightly modified snmpget method from net-snmp source to loop through multiple communities if necessary
     '''
 
     data = {}
-    data['output'] = ''
-    data['community'] = ''
     version = credential['version']
-    community = credential['community']
+    communities = credential['community']
+    com_count = len(communities)
 
-    cred_len = len(community)
-    for i in range(0, cred_len):
+    for i in range(0, com_count):
 	cmd = ''
-	community = credential['community'][i]
+	community = communities[i].strip()
         cmd = "snmpget -Oqv -v %s -c %s -r %s -t %s %s %s" % (
             version, community, retries, timeout, host, oid)
 	
 	returncode, output, err = exec_command(cmd)
-
+	
+	#print returncode, output, err
         if returncode and err:
-	    if i < cred_len:
+	    if i < com_count:
 	        continue	
+	    else:
+		data['error'] = str(err)
 	else:
 	    try:
 	        data['output'] = output
 	        data['community'] = community
+		#Got the data, now get out
 		break	
 	    except Exception, e:
-		print str(e)
+		print "There was a problem appending data to the dict " + str(e)
+
     return data
 
 def exec_command(command):
