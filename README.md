@@ -4,7 +4,9 @@
 The purpose of icinga-autod is to bring basic auto-discovery (to Icinga2 or Nagios Core) in an effort to take some of the pain away from discovering and adding a bunch of devices on new or existing networks. The focus of this tool is to quickly generate a fairly suitable host config with custom vars to tie them to HostGroups. 
 
 ##Usage:
-./icinga-autod.py -n 192.168.1.0/24 -l LOCATION
+./icinga-autod.py -n 192.168.1.0/24 -L LOCATION
+
+Add your own sys_descriptor matches in the compile_hvars method. Hoping to add a better way of handling this soon
 
 ##TODO:
 - Make host recognition more universal - like Vendor lookup based on sysObjectID OID
