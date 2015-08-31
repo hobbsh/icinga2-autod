@@ -184,7 +184,7 @@ def compile_hosts(data, location):
 	    '  import "generic-host"\n'
 	    '  address = "%s"\n\n'
 	    '  #Custom Variables\n'
-	    '  host.vars.location == "%s"\n'
+	    '  vars.location = "%s"\n'
 	    '  %s\n'
 	    '}\n' % (hostname, str(ip), str(location), str(hostvars))
 	)
@@ -213,9 +213,9 @@ def determine_hostname(hostname, ip, loc, hostvars):
 	
 def compile_hvars(sysdesc):
     sys_descriptors = {
-	'RouterOS': 'host.vars.network_mikrotik', 
-	'Linux':'host.vars.os == "Linux"', 
-	'APC Web/SNMP': 'host.vars.ups_apc', 
+	'RouterOS': 'vars.network_mikrotik = "true"', 
+	'Linux':'vars.os == "Linux"', 
+	'APC Web/SNMP': 'vars.ups_apc = "true"', 
     }
 
     hostvars = ''
