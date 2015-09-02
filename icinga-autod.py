@@ -4,7 +4,9 @@ import subprocess
 import argparse
 import nmap
 import time
+import json
 import socket
+import ianaparse
 
 """
 This discovery script will scan a subnet for alive hosts, 
@@ -45,6 +47,10 @@ def build_parser():
     parser.add_argument('-c', '--communities', default="public,private",
         help='Specify comma-separated list of SNMP communities to iterate through (to override default public,private)')
 
+    #The following two arguments have no effect currently
+    parser.add_argument('-r', '--reparse-iana', default=False,
+        help='Whether icinga-autod should grab a fresh version of the sysObjectIDs from the IANA URL')
+
     parser.add_argument('-t', '--thorough', default=0,
         help='Thorough scan mode (will take longer) - will try additional SNMP versions/communities to try to gather as much information as possible')
 
@@ -60,6 +66,7 @@ def main():
 	sys.stderr.write("There was a problem validating the arguments supplied. Please check your input and try again. Exiting...\n")
 	sys.exit(1)
 
+    
     start_time = time.time()
 
     cidr = args.network
@@ -70,7 +77,7 @@ def main():
     credential['community'] = args.communities.split(',')
 
     #Hostname and sysDescr OIDs
-    oids = '.1.3.6.1.2.1.1.5.0 1.3.6.1.2.1.1.1.0'
+    oids = '1.3.6.1.2.1.1.5.0 1.3.6.1.2.1.1.1.0 1.3.6.1.2.1.1.2.0'
 
     #Scan the network
     nm = handle_netscan(cidr)
@@ -79,7 +86,16 @@ def main():
 
     print("Found {0} hosts - gathering more info (can take up to 2 minutes)".format(get_count(nm.all_hosts())))
 
-    print credential['community']
+    try:
+	with open('iana_numbers.json', 'r') as f:
+	    numbers = json.load(f)
+    except:
+	try:
+    	    numbers = iana_convert.IanaParser().parse()
+	except:
+	    sys.exit("Unable to open iana_numbers.json or read from the URL. Exiting...")
+
+
     for host in nm.all_hosts():
 	host = str(host)
 
@@ -90,7 +106,7 @@ def main():
 	'''
 
 	data = snmpget_by_cl(host, credential, oids)
-
+ 
 	'''TODO: clean up this logic...'''
 	try:
 	    output = data['output'].split('\n')
@@ -102,12 +118,20 @@ def main():
 	if output:
 	    hostname = output[0]
 	    sysdesc = output[1]
+	    sysobject = output[2]
 	else:
 	    hostname = ''
 	    sysdesc = ''
+	    sysobject = ''
 	
+	v_match = vendor_match(numbers, sysobject)	
+	if v_match:
+	    vendor = v_match['o']
+	else:
+	    vendor = 'NA'
+	    
 	all_hosts[host] = { 
-	    'community': community, 'snmp_version': credential['version'], 'hostname': hostname, 'sysdesc': sysdesc }
+	    'community': community, 'snmp_version': credential['version'], 'hostname': hostname, 'sysdesc': sysdesc, 'vendor' : vendor }
 
     print "\n"
     print("Discovery took %s seconds" % (time.time() - start_time))
@@ -115,6 +139,25 @@ def main():
 
     outfile = compile_hosts(all_hosts, location)
     print "Wrote data to "+outfile
+
+def vendor_match(numbers, sysobject):
+    if sysobject:
+	prefixes = ['SNMPv2-SMI::enterprises']
+	
+	for prefix in prefixes:
+	    sysobject.strip(prefix)
+	
+	values = sysobject.split('.')
+	#first value will be the enterprise number
+	vendor_num = values[1]
+	
+	#print vendor_num, type(vendor_num)
+
+	vendor_string = numbers[vendor_num]
+	return vendor_string
+
+    else:
+	return '' 
 
 def check_args(args):
     '''Exit if required arguments not specified'''
@@ -185,8 +228,9 @@ def compile_hosts(data, location):
 	    '  address = "%s"\n\n'
 	    '  #Custom Variables\n'
 	    '  vars.location = "%s"\n'
+	    '  vars.vendor = "%s"\n'
 	    '  %s\n'
-	    '}\n' % (hostname, str(ip), str(location), str(hostvars))
+	    '}\n' % (hostname, str(ip), str(location), str(hdata['vendor']), str(hostvars))
 	)
 
 	f.write(host_entry)
