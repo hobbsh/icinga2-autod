@@ -78,7 +78,7 @@ def main():
 	sys.stderr.write("There was a problem validating the arguments supplied. Please check your input and try again. Exiting...\n")
 	sys.exit(1)
 
-    if args.debug is True:
+    if args.debug:
         debug = True
     else:
 	debug = False
