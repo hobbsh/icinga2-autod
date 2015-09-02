@@ -1,12 +1,19 @@
 #!/usr/bin/env python
+import util.checkpkg as checkpkg
+
+checkpkg.check(['nmap', 'snmp'])
+
 import sys
 import subprocess
-import argparse
-import nmap
+
+try:
+    import argparse
+except:
+    import util.argparse as argparse
+
 import time
-import json
 import socket
-import ianaparse
+import util.ianaparse as ianaparse
 
 """
 This discovery script will scan a subnet for alive hosts, 
@@ -47,6 +54,9 @@ def build_parser():
     parser.add_argument('-c', '--communities', default="public,private",
         help='Specify comma-separated list of SNMP communities to iterate through (to override default public,private)')
 
+    parser.add_argument('-d', '--debug', default=False,
+        help='Specify comma-separated list of SNMP communities to iterate through (to override default public,private)')
+
     #The following two arguments have no effect currently
     parser.add_argument('-r', '--reparse-iana', default=False,
         help='Whether icinga-autod should grab a fresh version of the sysObjectIDs from the IANA URL')
@@ -58,6 +68,8 @@ def build_parser():
 
 def main():
 
+    global debug
+
     parser = build_parser()
     args = parser.parse_args()
 
@@ -66,6 +78,10 @@ def main():
 	sys.stderr.write("There was a problem validating the arguments supplied. Please check your input and try again. Exiting...\n")
 	sys.exit(1)
 
+    if args.debug is True:
+        debug = True
+    else:
+	debug = False
     
     start_time = time.time()
 
@@ -80,23 +96,23 @@ def main():
     oids = '1.3.6.1.2.1.1.5.0 1.3.6.1.2.1.1.1.0 1.3.6.1.2.1.1.2.0'
 
     #Scan the network
-    nm = handle_netscan(cidr)
+    hosts = handle_netscan(cidr)
 
     all_hosts = {}
 
-    print("Found {0} hosts - gathering more info (can take up to 2 minutes)".format(get_count(nm.all_hosts())))
+    print("Found {0} hosts - gathering more info (can take up to 2 minutes)".format(get_count(hosts)))
 
     try:
 	with open('iana_numbers.json', 'r') as f:
 	    numbers = json.load(f)
     except:
 	try:
-    	    numbers = iana_convert.IanaParser().parse()
+    	    numbers = ianaparse.IanaParser().parse()
 	except:
 	    sys.exit("Unable to open iana_numbers.json or read from the URL. Exiting...")
 
 
-    for host in nm.all_hosts():
+    for host in hosts:
 	host = str(host)
 
 	'''If your communities/versions vary, modify credentials here. I've used last_octet to do this determination
@@ -106,7 +122,7 @@ def main():
 	'''
 
 	data = snmpget_by_cl(host, credential, oids)
- 
+
 	'''TODO: clean up this logic...'''
 	try:
 	    output = data['output'].split('\n')
@@ -116,22 +132,26 @@ def main():
 	    output = ''
 
 	if output:
-	    hostname = output[0]
-	    sysdesc = output[1]
-	    sysobject = output[2]
+	    hostname = output[0].strip('"')
+	    sysdesc = output[1].strip('"')
+	    sysobject = output[2].strip('"')
 	else:
 	    hostname = ''
 	    sysdesc = ''
 	    sysobject = ''
 	
 	v_match = vendor_match(numbers, sysobject)	
+
 	if v_match:
-	    vendor = v_match['o']
+	    vendor = v_match['o'].strip('"')
 	else:
 	    vendor = 'NA'
 	    
 	all_hosts[host] = { 
 	    'community': community, 'snmp_version': credential['version'], 'hostname': hostname, 'sysdesc': sysdesc, 'vendor' : vendor }
+
+	if debug:
+	    print host, sysobject, all_hosts[host]
 
     print "\n"
     print("Discovery took %s seconds" % (time.time() - start_time))
@@ -142,22 +162,26 @@ def main():
 
 def vendor_match(numbers, sysobject):
     if sysobject:
-	prefixes = ['SNMPv2-SMI::enterprises']
+	#Possible prefixes in sysObjectID OID largely dependent on MIB used
+	prefixes = ['SNMPv2-SMI::enterprises.', 'iso.3.6.1.4.1.', '1.3.6.1.4.1.', 'NET-SNMP-MIB::netSnmpAgentOIDs.']
 	
 	for prefix in prefixes:
-	    sysobject.strip(prefix)
+	    if sysobject.startswith(prefix):
+	        sysobject = sysobject[len(prefix):]
 	
 	values = sysobject.split('.')
 	#first value will be the enterprise number
-	vendor_num = values[1]
-	
-	#print vendor_num, type(vendor_num)
+	vendor_num = values[0]
 
-	vendor_string = numbers[vendor_num]
-	return vendor_string
+	try:
+	    vendor_string = numbers[vendor_num]
+	    return vendor_string
 
+	except Exception, e:
+	    sys.stderr.write('Unknown sysObjectID prefix encountered - you can add it to the prefix list in vendor_match(), but please report this on GitHub\n'+str(e))
+	    sys.exit(1)
     else:
-	return '' 
+	return ''
 
 def check_args(args):
     '''Exit if required arguments not specified'''
@@ -276,13 +300,35 @@ def handle_netscan(cidr):
     Scan network with nmap using ping only
     '''
     start = time.time()
+    '''
     nm = nmap.PortScanner()
     nm.scan(hosts=cidr, arguments='-sn -sP')
     
     print ("Scan took %s seconds" % (time.time() - start))
+    '''
+    ret, output, err = exec_command('nmap -sn -sP {0}'.format(cidr))
+    if ret and err:
+        sys.stderr.write('There was a problem performing the scan - is the network reachable?')
+	sys.exit(1)
+    else:
+	data = parse_nmap_scan(output)
+	if data:
+	    return data
+	else:
+	   sys.stderr.write('Unable to parse nmap scan results! Please report this issue')
+	   sys.exit(1)
 
-    return nm
+def parse_nmap_scan(data):
+    data_list = data.split('\n')
+    match = 'Nmap scan report for '
+    hosts = []
 
+    for line in data_list:
+        if match in line and line is not None:
+	    line = line[len(match):].strip(' ')
+	    hosts.append(line)
+
+    return hosts
 
 def snmpget_by_cl(host, credential, oid, timeout=1, retries=0):
     '''
