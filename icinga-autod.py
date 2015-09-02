@@ -182,9 +182,9 @@ def vendor_match(numbers, sysobject):
 
 	except Exception, e:
 	    sys.stderr.write('Unknown sysObjectID prefix encountered - you can add it to the prefix list in vendor_match(), but please report this on GitHub\n'+str(e))
-	    sys.exit(1)
+	    return False
     else:
-	return ''
+	return False
 
 def check_args(args):
     '''Exit if required arguments not specified'''
