@@ -5,6 +5,7 @@ checkpkg.check(['nmap', 'snmp'])
 
 import sys
 import subprocess
+import json
 
 try:
     import argparse
@@ -105,11 +106,14 @@ def main():
     try:
 	with open('iana_numbers.json', 'r') as f:
 	    numbers = json.load(f)
-    except:
+    except Exception, e:
+	print str(e)
 	try:
     	    numbers = ianaparse.IanaParser().parse()
 	except:
 	    sys.exit("Unable to open iana_numbers.json or read from the URL. Exiting...")
+
+	sys.stderr.write('Unable to open iana_numbers.json, trying URL method. ERROR: '+str(e))
 
 
     for host in hosts:
