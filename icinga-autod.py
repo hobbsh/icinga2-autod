@@ -107,7 +107,6 @@ def main():
 	with open('iana_numbers.json', 'r') as f:
 	    numbers = json.load(f)
     except Exception, e:
-	print str(e)
 	try:
     	    numbers = ianaparse.IanaParser().parse()
 	except:
