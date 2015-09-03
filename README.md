@@ -13,6 +13,7 @@ cd icinga-autod
 
 ./icinga-autod.py -n 192.168.1.0/24
 ```
+Will output discovered_hosts.conf to current directory. 
 
 ##Usage:
 This utility is meant to serve as a way to quickly generate a base hosts config for a given network. The host objects it creates (depending on the information it can gather) provide enough data to use HostGroups to do most of your check manangement. It's by no means a catch-all or the only way to do it, but I figured people might have a use for it.
