@@ -9,8 +9,8 @@ import json
 
 try:
     import argparse
-except:
-    import util.argparse as argparse
+except ImportError:
+    checkpkg.check(['python-argparse'])
 
 import time
 import socket
