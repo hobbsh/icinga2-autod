@@ -17,6 +17,7 @@ cd icinga-autod
 ##Usage:
 This utility is meant to serve as a way to quickly generate a base hosts config for a given network. The host objects it creates (depending on the information it can gather) provide enough data to use HostGroups to do most of your check manangement. It's by no means a catch-all or the only way to do it, but I figured people might have a use for it.
 
+```
 usage: icinga-autod.py [-h] -n NETWORK [-L LOCATION] [-c COMMUNITIES]
                        [-d DEBUG]
 
@@ -34,7 +35,7 @@ optional arguments:
                         iterate through (to override default public,private)
   -d DEBUG, --debug DEBUG
 			Use '-d True' to turn debug on
-
+```
 Add your own sys_descriptor matches in the compile_hvars method to add custom variables. Hoping to add a better way of handling this soon
 
 ##TODO:
