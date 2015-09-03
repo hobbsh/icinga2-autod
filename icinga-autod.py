@@ -40,16 +40,16 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 """
 
-USAGE = './icinga-autod.py -n 192.168.1.0/24 -L LOCATION'
+USAGE = './icinga-autod.py -n 192.168.1.0/24'
 
 def build_parser():
 
     parser = argparse.ArgumentParser(description='Device AutoDiscovery Tool')
 
-    parser.add_argument('-n', '--network',
+    parser.add_argument('-n', '--network', required=True,
 	help='Network segment (only /24) to iterate through for live IP addresses in CIDR IPv4 Notation')
 
-    parser.add_argument('-L', '--location',
+    parser.add_argument('-L', '--location', default=None,
         help='Location alias of the network - will be appended to the hosts config (i.e. hosts_location.conf)')
 
     parser.add_argument('-c', '--communities', default="public,private",
@@ -87,6 +87,7 @@ def main():
     start_time = time.time()
 
     cidr = args.network
+
     location = args.location
 
     credential = dict()
@@ -124,31 +125,35 @@ def main():
 	   Otherwise, grab the data
 	'''
 
-	data = snmpget_by_cl(host, credential, oids)
+        hostname = ''
 
-	'''TODO: clean up this logic...'''
-	try:
-	    output = data['output'].split('\n')
-	    community = data['community']
-	except:
-	    community = 'unknown'
-	    output = ''
+        if ',' in host:
+            hostname, host = host.split(',')
 
-	if output:
+        data = snmpget_by_cl(host, credential, oids)
+
+        '''TODO: clean up this logic...'''
+        try:
+            output = data['output'].split('\n')
+            community = data['community']
+
 	    hostname = output[0].strip('"')
-	    sysdesc = output[1].strip('"')
-	    sysobject = output[2].strip('"')
-	else:
-	    hostname = ''
-	    sysdesc = ''
-	    sysobject = ''
+            sysdesc = output[1].strip('"')
+            sysobject = output[2].strip('"') 
+
+        except:
+            community = 'unknown'
+            output = ''
+
+            sysdesc = ''
+            sysobject = ''
 	
 	v_match = vendor_match(numbers, sysobject)	
 
 	if v_match:
 	    vendor = v_match['o'].strip('"')
 	else:
-	    vendor = 'NA'
+	    vendor = None
 	    
 	all_hosts[host] = { 
 	    'community': community, 'snmp_version': credential['version'], 'hostname': hostname, 'sysdesc': sysdesc, 'vendor' : vendor }
@@ -188,10 +193,11 @@ def vendor_match(numbers, sysobject):
 
 def check_args(args):
     '''Exit if required arguments not specified'''
-    if args.network == None or args.location == None:
+    '''
+    if args.network == None:
 	sys.stderr.write("Network and/or location are required arguments! Use -h for help\n")
 	sys.exit(1)
-
+    '''
     check_flags = {}
     '''Iterate through specified args and make sure input is valid. TODO: add more flags'''
     for k,v in vars(args).iteritems():
@@ -241,24 +247,23 @@ def get_count(hosts):
         return count
 
 def compile_hosts(data, location):
-    loc = location.lower()
-    
-    filename = 'hosts_'+loc+'.conf'
+    if location: 
+	loc = location.lower()
+        filename = 'hosts_'+loc+'.conf'
+    else:
+	filename = 'discovered_hosts.conf'
+
     f = open(filename, 'w')
 
     for ip, hdata in data.iteritems():
 	hostvars = compile_hvars(hdata['sysdesc'])
-	hostname = determine_hostname(hdata['hostname'], ip, loc, hostvars)
-        host_entry = (
-	    'object Host "%s" {\n'
-	    '  import "generic-host"\n'
-	    '  address = "%s"\n\n'
-	    '  #Custom Variables\n'
-	    '  vars.location = "%s"\n'
-	    '  vars.vendor = "%s"\n'
-	    '  %s\n'
-	    '}\n' % (hostname, str(ip), str(location), str(hdata['vendor']), str(hostvars))
-	)
+
+	if not hdata['hostname']:
+	    hostname = ip
+	else:
+	    hostname = hdata['hostname']
+
+	host_entry = build_host_entry(hostname, str(ip), location, hdata['vendor'], str(hostvars))
 
 	f.write(host_entry)
 
@@ -266,21 +271,22 @@ def compile_hosts(data, location):
 
     return filename
 
-def determine_hostname(hostname, ip, loc, hostvars):
-    ''' if host does not have a valid or any hostname, try to create one '''
-    if len(hostname.split('.')) > 1:
-	'''has valid hostname for my environment'''
-	return hostname
-    else:
-	if hostname:
-	    if 'mikrotik' in hostvars:
-		hostname = 'router.'+loc
+def build_host_entry(hostname, ip, location, vendor, hostvars):
+    host_entry = ( 'object Host "%s" {\n'
+		   '  import "generic-host"\n'
+		   '  address = "%s"\n'
+		 ) % (hostname, ip)
 
-	    return hostname
+    if location:
+	host_entry += '  vars.location = "{0}"\n'.format(location)
+    if vendor:
+	host_entry += '  vars.vendor = "{0}"\n'.format(vendor)
+    if hostvars: 
+	host_entry += '  {0}\n'.format(hostvars)
 
-	else:
-	    return ip
-		
+    host_entry += '}\n'
+
+    return host_entry
 	
 def compile_hvars(sysdesc):
     sys_descriptors = {
@@ -303,17 +309,15 @@ def handle_netscan(cidr):
     Scan network with nmap using ping only
     '''
     start = time.time()
-    '''
-    nm = nmap.PortScanner()
-    nm.scan(hosts=cidr, arguments='-sn -sP')
-    
-    print ("Scan took %s seconds" % (time.time() - start))
-    '''
+
+    print "Starting scan for "+cidr
+
     ret, output, err = exec_command('nmap -sn -sP {0}'.format(cidr))
     if ret and err:
         sys.stderr.write('There was a problem performing the scan - is the network reachable?')
 	sys.exit(1)
     else:
+	print ("Scan took %s seconds" % (time.time() - start))
 	data = parse_nmap_scan(output)
 	if data:
 	    return data
@@ -325,11 +329,18 @@ def parse_nmap_scan(data):
     data_list = data.split('\n')
     match = 'Nmap scan report for '
     hosts = []
-
     for line in data_list:
         if match in line and line is not None:
-	    line = line[len(match):].strip(' ')
-	    hosts.append(line)
+            line = line[len(match):].strip(' ')
+
+            if '(' in line:
+                remove = '()'
+                for c in remove:
+                    line = line.replace(c, '')
+
+                line = ','.join(line.split(' '))
+
+            hosts.append(line)
 
     return hosts
 
