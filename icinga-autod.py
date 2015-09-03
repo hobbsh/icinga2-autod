@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import util.checkpkg as checkpkg
 
-checkpkg.check(['nmap', 'snmp'])
+checkpkg.check(['nmap', 'snmp', 'net-snmp-utils'])
 
 import sys
 import subprocess
@@ -112,7 +112,7 @@ def main():
 	except:
 	    sys.exit("Unable to open iana_numbers.json or read from the URL. Exiting...")
 
-	sys.stderr.write('Unable to open iana_numbers.json, trying URL method. ERROR: '+str(e))
+	sys.stderr.write('Unable to open iana_numbers.json, trying URL method. Please wait\n')
 
 
     for host in hosts:
