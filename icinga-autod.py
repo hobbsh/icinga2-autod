@@ -285,7 +285,7 @@ def determine_hostname(hostname, ip, loc, hostvars):
 def compile_hvars(sysdesc):
     sys_descriptors = {
 	'RouterOS': 'vars.network_mikrotik = "true"', 
-	'Linux':'vars.os == "Linux"', 
+	'Linux':'vars.os = "Linux"', 
 	'APC Web/SNMP': 'vars.ups_apc = "true"', 
     }
 
