@@ -1,15 +1,15 @@
-# icinga-autod
+# icinga2-autod
 
 ##Purpose:
-The purpose of icinga-autod is to bring basic auto-discovery (to Icinga2 or Nagios Core) in an effort to take some of the pain away from discovering and adding a bunch of devices on new or existing networks. The focus of this tool is to quickly generate a fairly suitable host config with custom vars to tie them to HostGroups. 
+The purpose of icinga2-autod is to bring basic auto-discovery Icinga2 (or Icinga/Nagios Core with minor modifications) in an effort to take some of the pain away from discovering and adding a bunch of devices on new or existing networks. The focus of this tool is to quickly generate a fairly suitable host config with custom vars to tie them to HostGroups. 
 
 ##Requirements
-This script requires Linux package 'nmap' and 'snmp' (or 'net-snmp + net-snmp-utils' on RHEL)
+This utility requires Linux packages 'nmap' and 'snmp' (or 'net-snmp + net-snmp-utils' on RHEL). It will not run until any missing requirements are satisfied.  
 
 ##Installation
 ```bash
-git clone https://github.com/hobbsh/icinga-autod.git
-cd icinga-autod
+git clone https://github.com/hobbsh/icinga2-autod.git
+cd icinga2-autod
 
 ./icinga-autod.py -n 192.168.1.0/24
 ```
