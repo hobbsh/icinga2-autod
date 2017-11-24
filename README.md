@@ -1,12 +1,12 @@
 # icinga2-autod
 
-##Purpose:
+## Purpose:
 The purpose of icinga2-autod is to bring basic auto-discovery Icinga2 (or Icinga/Nagios Core with minor modifications) in an effort to take some of the pain away from discovering and adding a bunch of devices on new or existing networks. The focus of this tool is to quickly generate a fairly suitable host config with custom vars to tie them to HostGroups. 
 
-##Requirements
+## Requirements
 This utility requires Linux packages 'nmap' and 'snmp' (or 'net-snmp + net-snmp-utils' on RHEL). It will not run until any missing requirements are satisfied.  
 
-##Installation
+## Installation
 ```bash
 git clone https://github.com/hobbsh/icinga2-autod.git
 cd icinga2-autod
@@ -15,7 +15,7 @@ cd icinga2-autod
 ```
 Will output discovered_hosts.conf to current directory. 
 
-##Usage:
+## Usage:
 This utility is meant to serve as a way to quickly generate a base hosts config for a given network. The host objects it creates (depending on the information it can gather) provide enough data to use HostGroups to do most of your check manangement. It's by no means a catch-all or the only way to do it, but I figured people might have a use for it.
 
 ```
@@ -39,7 +39,7 @@ optional arguments:
 ```
 Add your own sys_descriptor matches in the compile_hvars method to add custom variables. Hoping to add a better way of handling this soon
 
-##TODO:
+## TODO:
 - More options
  - Allow user to input hostname FQDN format (should it come to that)
  - Specify SNMP timeout/retries
